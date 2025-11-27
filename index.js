@@ -26,14 +26,25 @@ async function run() {
     await client.connect();
     // Send a ping to confirm a successful connection
        const db=client.db('ZapifyDB');
-       const parcelCollaction=db.collection('parcels');
+       const parcelCollaction=db.collection('parcelsDB');
 
-       app.get('/parcels',(req,res)=>{
+       app.get('/parcels',async(req,res)=>{
+               const query={}
+               const {email}=req.query;
+               if(email){
+                query.senderEmail=email;
+               }
 
+               const Options={sort: {createdAt: -1}}
+               const cursor= parcelCollaction.find(query, Options)
+              const  result= await cursor.toArray()
+               res.send(result)
        });
 
        app.post('/parcels', async(req,res)=>{
           const parcel=req.body
+          // Parcel Created Time
+          parcel.createdAt= new Date()
           const result= await parcelCollaction.insertOne(parcel) 
           res.send(result)  
        });
