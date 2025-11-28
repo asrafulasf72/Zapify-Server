@@ -29,6 +29,7 @@ async function run() {
     // Send a ping to confirm a successful connection
     const db = client.db('ZapifyDB');
     const parcelCollaction = db.collection('parcelsDB');
+    const paymentCollaction= db.collection('payments');
 
     app.get('/parcels', async (req, res) => {
       const query = {}
@@ -79,7 +80,7 @@ async function run() {
               currency:'USD',
               unit_amount:amount,
               product_data:{
-                name:paymentInfo.parcelName
+                name:`please Pay For ${paymentInfo.parcelName}`
               }
            },
 
@@ -89,14 +90,49 @@ async function run() {
         customer_email:paymentInfo.senderEmail,
         mode: 'payment',
         metadata:{
-           parcelId:paymentInfo.parcelId
+           parcelId:paymentInfo.parcelId,
+           parcelName:paymentInfo.parcelName
         },
-        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-canceled`,
       })
       console.log(session)
       res.send({url: session.url})
     });
+
+    app.patch('/payment-success', async(req,res)=>{
+           const sessionId=req.query.session_id
+            const session = await stripe.checkout.sessions.retrieve(sessionId)
+            console.log('session Retrive: ', session)
+
+            if(session. payment_status==='paid'){
+                const id=session.metadata.parcelId
+                const query={_id: new ObjectId(id)}
+                const update ={
+                  $set:{
+                    paymentStatus:'paid',
+                  }
+            
+                }
+                const result= await parcelCollaction.updateOne(query, update)
+                 const payment={
+                  amount:session.amount_total/100,
+                   currency:session. currency,
+                   customer_Email:session.customer_email,
+                   parcelId:session.metadata.parcelId,
+                   parcelName:session.metadata.parcelName,
+                   transactionId:session.payment_intent,
+                   payment_status:session.payment_status,
+                   paidAt: new Date(),
+                   trackingId:''
+                 }
+                 if(session.payment_status==='paid'){
+                       const resultPayment= await paymentCollaction.insertOne(payment)
+                       res.send({success:true, modifyParcel: result, paymentInfo:resultPayment})
+                 }
+            }
+           res.send({success: false})
+    })
 
 
 
