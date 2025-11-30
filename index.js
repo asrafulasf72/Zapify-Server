@@ -10,6 +10,19 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_Password}@myfirst-cluster.32i1hy9.mongodb.net/?appName=myfirst-cluster`;
 
 
+function generateTrackingId() {
+  const prefix = "TRK";
+  const date = new Date().toISOString().slice(0,10).replace(/-/g, "");
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  
+  return `${prefix}-${date}-${random}`;
+}
+
+console.log(generateTrackingId());
+
+
+
+
 // middleware
 app.use(express.json());
 app.use(cors());
@@ -102,36 +115,49 @@ async function run() {
 
     app.patch('/payment-success', async(req,res)=>{
            const sessionId=req.query.session_id
-            const session = await stripe.checkout.sessions.retrieve(sessionId)
-            console.log('session Retrive: ', session)
 
-            if(session. payment_status==='paid'){
-                const id=session.metadata.parcelId
+            const session = await stripe.checkout.sessions.retrieve(sessionId)
+            // console.log('session Rettrive', session)
+              const transactionId=session.payment_intent
+              const query={transactionId:transactionId}
+
+              const paymentExist= await paymentCollaction.findOne(query)
+               if(paymentExist){
+                 return res.send({message: 'Already Exist Transaction ID', transactionId, trackingId:paymentExist.trackingId})
+               }
+            const trackingId=generateTrackingId();
+
+             if(session.payment_status === 'paid'){
+                const id= session.metadata.parcelId;
                 const query={_id: new ObjectId(id)}
-                const update ={
+
+                const update={
                   $set:{
-                    paymentStatus:'paid',
+                    paymentStatus: 'paid',
+                    trackingId:trackingId
                   }
-            
                 }
                 const result= await parcelCollaction.updateOne(query, update)
-                 const payment={
+                const payment={
                   amount:session.amount_total/100,
-                   currency:session. currency,
-                   customer_Email:session.customer_email,
-                   parcelId:session.metadata.parcelId,
-                   parcelName:session.metadata.parcelName,
-                   transactionId:session.payment_intent,
-                   payment_status:session.payment_status,
-                   paidAt: new Date(),
-                   trackingId:''
-                 }
-                 if(session.payment_status==='paid'){
-                       const resultPayment= await paymentCollaction.insertOne(payment)
-                       res.send({success:true, modifyParcel: result, paymentInfo:resultPayment})
-                 }
-            }
-           res.send({success: false})
+                  currency:session.currency,
+                  customerEmail:session.customer_email,
+                  parcelId:session.metadata.parcelId,
+                  parcelName:session.metadata.parcelName,
+                  transactionId:session.payment_intent,
+                  paymentStatus:session.payment_status,
+                  paidAt: new Date(),
+                  trackingId:trackingId
+
+                }
+
+                if(session.payment_status==='paid'){
+                    const resultPayment= await paymentCollaction.insertOne(payment)
+                    res.send({success: true, modifyparcel:result, trackingId:trackingId, transactionId:session.payment_intent, paymentInfo:resultPayment})
+                }
+             }
+           
+          //  res.send({success: false})
     })
 
 
