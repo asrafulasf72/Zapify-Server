@@ -2,8 +2,20 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const e = require('express');
 require('dotenv').config()
 const port = process.env.PORT || 3000
+
+
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./zapify-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
@@ -18,14 +30,37 @@ function generateTrackingId() {
   return `${prefix}-${date}-${random}`;
 }
 
-console.log(generateTrackingId());
-
-
 
 
 // middleware
 app.use(express.json());
 app.use(cors());
+
+
+const verifyFireBaseToken= async(req,res, next)=>{
+
+  const token=req.headers?.authorization
+  // console.log('Headers in Middleware: ', token)
+
+    if(!token){
+      return res.status(401).send({message: 'unauthorized access'})
+    }
+
+    try{
+      const tokenId= token.split(' ')[1];
+      const decoded= await admin.auth().verifyIdToken(tokenId)
+         console.log('Decoded In the token: ', decoded)
+
+         req.decoded_email=decoded.email
+          next();
+    }catch(err){
+        return res.status(401).send({message: 'unauthorized access'})
+    }
+ 
+}
+
+
+
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -160,6 +195,26 @@ async function run() {
           //  res.send({success: false})
     })
 
+//  Payment Related Api
+  app.get('/payments', verifyFireBaseToken, async(req,res)=>{
+     const email=req.query.email
+     const query={}
+
+    //  console.log('headers :', req.headers)
+
+     if(email){
+       query.customerEmail=email
+
+      //  check email Address
+      if(email !== req.decoded_email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+     }
+
+     const cursor= paymentCollaction.find(query)
+     const result= await cursor.toArray()
+     res.send(result)
+  })
 
 
     await client.db("admin").command({ ping: 1 });
