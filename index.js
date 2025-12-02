@@ -76,8 +76,28 @@ async function run() {
     await client.connect();
     // Send a ping to confirm a successful connection
     const db = client.db('ZapifyDB');
+    const userCollaction=db.collection('users');
     const parcelCollaction = db.collection('parcelsDB');
     const paymentCollaction= db.collection('payments');
+    const ridersCollaction= db.collection('riders');
+
+
+
+    // Users API
+    app.post('/users', async(req,res)=>{
+          const user=req.body;
+           user.role='user';
+           user.createdAt= new Date()
+           const email=user.email;
+
+           const userExist= await userCollaction.findOne({email})
+           if(userExist){
+            return res.send({message: 'User Exist'})
+           }
+
+           const result= await userCollaction.insertOne(user)
+           res.send(result)
+    })
 
     app.get('/parcels', async (req, res) => {
       const query = {}
@@ -211,11 +231,23 @@ async function run() {
       }
      }
 
-     const cursor= paymentCollaction.find(query)
+     const cursor= paymentCollaction.find(query).sort({paidAt: -1})
      const result= await cursor.toArray()
      res.send(result)
   })
 
+  // Rider Related Api 
+      
+
+  app.post('/riders', async(req,res)=>{
+          const riderInfo=req.body
+              riderInfo.status='pending';
+              riderInfo.createdAt= new Date();
+
+              const result= await ridersCollaction.insertOne(riderInfo)
+              res.send(result)
+
+  })
 
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
