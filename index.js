@@ -99,6 +99,15 @@ async function run() {
            res.send(result)
     })
 
+    app.get('/users', verifyFireBaseToken, async(req,res)=>{
+            const cursor= userCollaction.find()
+            const result= await cursor.toArray()
+            res.send(result)
+    })
+
+
+
+    // Parcel Related Api
     app.get('/parcels', async (req, res) => {
       const query = {}
       const { email } = req.query;
@@ -237,6 +246,18 @@ async function run() {
   })
 
   // Rider Related Api 
+
+  app.get('/riders', async(req,res)=>{
+            const query={}
+
+            if(req.query.status){
+                 query.status=req.query.status
+            }
+
+            const cursor= ridersCollaction.find(query).sort({createdAt: -1})
+            const result= await cursor.toArray();
+            res.send(result);
+  })
       
 
   app.post('/riders', async(req,res)=>{
@@ -247,6 +268,30 @@ async function run() {
               const result= await ridersCollaction.insertOne(riderInfo)
               res.send(result)
 
+  })
+
+  app.patch('/riders/:id', verifyFireBaseToken, async(req,res)=>{
+           const status=req.body.status;
+           const id=req.params.id;
+           const query={_id: new ObjectId(id)}
+           const updateDoc={
+            $set:{
+              status: status
+            }
+           }
+           const result= await ridersCollaction.updateOne(query, updateDoc)
+           if(status === 'Approved'){
+            const email=req.body.email
+            const userQuery={email}
+            const updateUser={
+              $set:{
+                role:'rider'
+              }
+            }
+            const userResult= await userCollaction.updateOne(userQuery, updateUser)
+            
+           }
+           res.send(result)
   })
 
     await client.db("admin").command({ ping: 1 });
