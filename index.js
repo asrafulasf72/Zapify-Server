@@ -82,6 +82,22 @@ async function run() {
     const ridersCollaction= db.collection('riders');
 
 
+    // MiddleWare Amin Before Allowing admin activity
+    // Must be Use After FireBase Token Verifiy middleware
+
+
+    const verifyAdmin= async(req,res,next)=>{
+           const email=req.decoded_email;
+           const query={email}
+
+           const user= await userCollaction.findOne(query)
+
+           if(!user || user.role !== 'admin'){
+             return res.status(403).send({message: 'forbidden access!'})
+           }
+      next()
+
+    }
 
     // Users API
     app.post('/users', async(req,res)=>{
@@ -100,9 +116,46 @@ async function run() {
     })
 
     app.get('/users', verifyFireBaseToken, async(req,res)=>{
-            const cursor= userCollaction.find()
+
+      const SearchText=req.query.SearchText
+      const query={}
+      if(SearchText){
+        //  query.displayName={$regex: SearchText, $options: 'i'}
+        query.$or =[
+          {displayName: {$regex: SearchText, $options: 'i'}},
+          {email: {$regex: SearchText, $options: 'i'}},
+        ]
+      }
+            const cursor= userCollaction.find(query).sort({createdAt: -1})
             const result= await cursor.toArray()
             res.send(result)
+    })
+
+    app.get('/users/:id', async(req,res)=>{
+       
+    })
+
+    app.get('/users/:email/role', async(req,res)=>{
+            const email=req.params.email
+            const query={email}
+
+            const user = await userCollaction.findOne(query)
+            res.send({role: user?.role || 'user'})
+    })
+
+    app.patch('/users/:id/role', verifyFireBaseToken, verifyAdmin, async(req,res)=>{
+           const id=req.params.id;
+           const roleInfo=req.body;
+           const query={_id: new ObjectId(id)}
+
+           const updateDoc={
+            $set:{
+              role: roleInfo.role
+            }
+           }
+           const result = await userCollaction.updateOne(query, updateDoc)
+           res.send(result)
+
     })
 
 
@@ -110,9 +163,13 @@ async function run() {
     // Parcel Related Api
     app.get('/parcels', async (req, res) => {
       const query = {}
-      const { email } = req.query;
+      const { email,deliveryStatus } = req.query;
       if (email) {
         query.senderEmail = email;
+      }
+
+      if(deliveryStatus){
+        query.deliveryStatus=deliveryStatus
       }
 
       const Options = { sort: { createdAt: -1 } }
@@ -198,6 +255,7 @@ async function run() {
                 const update={
                   $set:{
                     paymentStatus: 'paid',
+                    deliveryStatus:'pending-pickup',
                     trackingId:trackingId
                   }
                 }
@@ -270,13 +328,14 @@ async function run() {
 
   })
 
-  app.patch('/riders/:id', verifyFireBaseToken, async(req,res)=>{
+  app.patch('/riders/:id', verifyFireBaseToken, verifyAdmin, async(req,res)=>{
            const status=req.body.status;
            const id=req.params.id;
            const query={_id: new ObjectId(id)}
            const updateDoc={
             $set:{
-              status: status
+              status: status,
+              workStatus:'Available'
             }
            }
            const result= await ridersCollaction.updateOne(query, updateDoc)
