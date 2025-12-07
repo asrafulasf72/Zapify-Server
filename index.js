@@ -80,6 +80,7 @@ async function run() {
     const parcelCollaction = db.collection('parcelsDB');
     const paymentCollaction = db.collection('payments');
     const ridersCollaction = db.collection('riders');
+    const trackingsCollaction = db.collection('trackings');
 
 
     // MiddleWare Amin Before Allowing admin activity
@@ -97,6 +98,19 @@ async function run() {
       }
       next()
 
+    }
+
+
+    const logTracking=async(trackingId, status)=>{
+         const log={
+             trackingId,
+             status,
+             details:status.split('_').join(' '),
+             createdAt: new Date()
+         }
+
+         const result= await trackingsCollaction.insertOne(log)
+         return result;
     }
 
     // Users API
@@ -214,7 +228,7 @@ async function run() {
     });
 
     app.patch('/parcels/:id', async (req, res) => {
-      const { riderId, riderName, riderEmail } = req.body
+      const { riderId, riderName, riderEmail,trackingId } = req.body
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
 
@@ -238,12 +252,15 @@ async function run() {
         }
       }
       const riderResult = await ridersCollaction.updateOne(riderQuery, riderUpdatedDoc)
+
+      // log tracking
+         logTracking(trackingId, 'rider-assign')
       res.send(riderResult)
     })
 
 
     app.patch('/parcels/:id/status', async (req, res) => {
-      const { deliveryStatus,riderId } = req.body
+      const { deliveryStatus,riderId,trackingId} = req.body
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const updateDoc = {
@@ -263,6 +280,8 @@ async function run() {
         const riderResult = await ridersCollaction.updateOne(riderQuery, riderUpdatedDoc)
       }
       const result = await parcelCollaction.updateOne(query, updateDoc)
+      // Log tracking
+      logTracking(trackingId,deliveryStatus)
       res.send(result)
     })
 
@@ -347,6 +366,7 @@ async function run() {
 
         if (session.payment_status === 'paid') {
           const resultPayment = await paymentCollaction.insertOne(payment)
+          logTracking(trackingId, 'parcel_paid')
           res.send({ success: true, modifyparcel: result, trackingId: trackingId, transactionId: session.payment_intent, paymentInfo: resultPayment })
         }
       }
@@ -430,6 +450,16 @@ async function run() {
 
       }
       res.send(result)
+    })
+
+    // Tracking Related Api
+    app.get('/trackings/:trackingId/logs', async(req,res)=>{
+      const trackingId=req.params.trackingId
+      const query={trackingId};
+
+      const result=await trackingsCollaction.find(query).toArray();
+      res.send(result)
+
     })
 
     await client.db("admin").command({ ping: 1 });
