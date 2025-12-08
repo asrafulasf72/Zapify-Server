@@ -219,6 +219,20 @@ async function run() {
       res.send(result)
     })
 
+    // Aggregation 
+    app.get('/parcels/delivery/stats', async(req,res)=>{
+      const pipeline=[
+        {
+          $group:{
+            _id:'$deliveryStatus',
+            count: {$sum: 1}
+          }
+        }
+      ]
+      const result= await parcelCollaction.aggregate(pipeline).toArray()
+      res.send(result)
+    })
+
     app.post('/parcels', async (req, res) => {
       const parcel = req.body
       // Parcel Created Time
